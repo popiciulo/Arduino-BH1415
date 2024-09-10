@@ -1,19 +1,24 @@
-#include <ButtonGestures.h>
+#include <ButtonManager.h>
 
-#define POWER_BUTTON 7
-#define BUTTON_UP 8
-#define BUTTON_DOWN 9
-#define TX_ON_OFF 5
+// start editing !!!
+// Define your buttons (name, pin, mode, initial status, previous status)
+Button buttons[3] = {
+    {"power_button", 4, INPUT_PULLUP, HIGH, HIGH},
+    {"up_button", 5, INPUT_PULLUP, HIGH, HIGH},
+    {"down_button", 6, INPUT_PULLUP, HIGH, HIGH}
+};
+int totalButtons = 3;
 
-ButtonGestures  powerButton(POWER_BUTTON, LOW, INPUT_PULLUP);
-ButtonGestures  upButton(BUTTON_UP, LOW, INPUT_PULLUP);
-ButtonGestures  downButton(BUTTON_DOWN, LOW, INPUT_PULLUP);
+// Initialize the ButtonManager (3 buttons, 1000 ms for long press)
+ButtonManager buttonManager(buttons, totalButtons, 500);
 
-#define data 12
-#define clk 11
-#define ena 10
+// BH1415 
+int TX_ON_OFF = 9;
+int ENABLE = 10;
+int CLOCK = 11;
+int DATA = 12;
 
-unsigned int st_mn = 8; // Start with mono mode (8) and (9) for stereo
+unsigned int stereo_mono = 8; // Start with mono mode (8) and (9) for stereo
 unsigned int frequency = 875; // Start with frequency 101.1 MHz
 unsigned short st = 0; // Mono stereo control
 unsigned int mask = 0; // Bit selection control for sending to BH1415
@@ -22,147 +27,83 @@ boolean is_on = false;
 boolean is_menu = false;
 boolean refresh_message = true;
 
-void setup()
-{
-  Serial.begin(9600);
+// stop editing !!!
 
-  pinMode(ena, OUTPUT);
-  pinMode(data, OUTPUT);
-  pinMode(clk, OUTPUT);
+void setup() {
+  Serial.begin(9600); // for debugging
+
+  for (int i = 0; i < totalButtons; i++) {
+    pinMode(buttons[i].pin, buttons[i].mode);
+  }
+  pinMode(ENABLE, OUTPUT);
+  pinMode(CLOCK, OUTPUT);
+  pinMode(DATA, OUTPUT);
   pinMode(TX_ON_OFF, OUTPUT);
 
-  pinMode(POWER_BUTTON, INPUT_PULLUP);
-  pinMode(BUTTON_UP, INPUT_PULLUP);
-  pinMode(BUTTON_DOWN, INPUT_PULLUP);
-
-  digitalWrite(TX_ON_OFF, HIGH);  // Turn transmitter OFF by default
+  digitalWrite(TX_ON_OFF, HIGH); // Turn OFF TX
   while (!Serial);
   Serial.print("OFF |");
-  Serial.println((st_mn == 8) ? " MONO" : " STEREO");
+  Serial.println((stereo_mono == 8) ? " MONO" : " STEREO");
+  Serial.println("Freq: " + String((float)frequency/10) + "MHz");  
+}
+
+void loop() {
+  buttonManager.checkButtons(clickHandler);
+}
+
+void displayScreen() {
   Serial.println("Freq: " + String((float)frequency/10) + "MHz");
+  is_on ? Serial.print("ON |") : Serial.print("OFF | ");
+  Serial.println((stereo_mono == 8) ? " MONO" : " STEREO");
 }
 
-void loop()
-{
-  checkButtons();
-  delay(100);
-}
-
-void statusPowerButton(const uint8_t state, const char* const label = NULL)  {
-    switch (state) {
-        case SINGLE_PRESS_SHORT: 
-          if(is_menu && is_on) {
-            Serial.print("Stereo/Mono: ");            
-            Serial.println((st_mn == 8) ? "MONO" : "STEREO");
-            Serial.println("Long press to change MONO/STEREO");
-          } else if (!is_menu && is_on) {
-            Serial.print(F("Double click to enter menu | Long press to turn if OFF"));
-          } else {
-            Serial.print(F("Long press to turn if ON"));
-          }
-        break;
-        case SINGLE_PRESS_LONG:   
-          if(is_on && !is_menu) {
-            Serial.println(F(" turning OFF "));
-            digitalWrite(TX_ON_OFF, HIGH);
-            Serial.print("OFF |");
-            Serial.println((st_mn == 8) ? " MONO" : " STEREO");
-            Serial.println("Freq: " + String((float)frequency/10) + "MHz");
-          } else if (is_menu) {
-            st_mn = (st_mn == 8) ? 9 : 8;
-            delay(200);
-            setFrequency();
-            delay(200);
-            Serial.println((st_mn == 8) ? "MONO" : "STEREO");
-
-          } else {
-            digitalWrite(TX_ON_OFF, LOW);
-            Serial.println(F(" turning ON "));
-            delay(200);
-            setFrequency();
-            delay(200);            
-            Serial.println("Freq: " + String((float)frequency/10) + "MHz");
-          }
-          is_on = !is_on;
-        break;
-        case DOUBLE_PRESS_SHORT:                  
-          is_menu = !is_menu;
-          is_menu ? Serial.println(F("Entering Menu")) : Serial.println(F("Leaving Menu")); 
-        break;
-        case NOT_PRESSED:
-        default:
-            return;
+void clickHandler(Button button, String click_type) {
+  
+  if(button.name == "power_button" && click_type == "long") {
+    if(is_on) { 
+      digitalWrite(TX_ON_OFF, HIGH); // turn off TX
+      is_on = false;
+    } else {
+      is_on = true;
+      digitalWrite(TX_ON_OFF, LOW); // turn on TX
+      setFrequency("same");
     }
-    Serial.println();
+  }
+
+  if(button.name == "up_button") {
+    if(click_type == "short") {
+      setFrequency("up");
+    } else if(click_type == "long") { // TX if off and long click on UP
+      stereo_mono = (stereo_mono == 8) ? 9 : 8; // change MONO or STEREO
+    } 
+  } 
+
+  if(button.name == "down_button") {
+    if(click_type == "short") {
+      setFrequency("down");
+    } else if(click_type == "long") { // TX if off and long click
+      stereo_mono = (stereo_mono == 8) ? 9 : 8; // change MONO or STEREO
+    } 
+  } 
+
+  displayScreen();   
 }
 
-void statusUpButton(const uint8_t state, const char* const label = NULL)  {
-    switch (state) {
-        case SINGLE_PRESS_SHORT: 
-          if(is_on){
-            if(is_menu) {
-
-            } else {
-              setFrequency();
-              frequency++;
-              if (frequency > 1080)
-                frequency = 870;
-              setFrequency();
-              delay(200);
-              setFrequency();
-              delay(200);
-              Serial.println("Freq: " + String((float)frequency/10) + "MHz");
-            }
-          }
-        break;
-        case SINGLE_PRESS_LONG: break;
-        case DOUBLE_PRESS_SHORT: break;
-        case NOT_PRESSED:
-        default:
-            return;
-    }
-    Serial.println();
-}
-
-void statusDownButton(const uint8_t state, const char* const label = NULL)  {
-    switch (state) {
-        case SINGLE_PRESS_SHORT: 
-          if(is_on){
-            if(is_menu) {
-              Serial.print(F("Up in Menu"));            
-            } else {
-              frequency--;
-              if (frequency < 870)
-                frequency = 1080;
-              setFrequency();
-              delay(200);
-              setFrequency();
-              delay(200);            
-              Serial.println("Freq: " + String((float)frequency/10) + "MHz");
-            }
-          }
-        break;
-        case SINGLE_PRESS_LONG: break;
-        case DOUBLE_PRESS_SHORT:break;
-        case NOT_PRESSED:
-        default:
-            return;
-    }
-    Serial.println();
-}
-
-
-void checkButtons()
+void setFrequency(String direction) // Function to send bits to BH1415
 {
-  statusPowerButton(powerButton.check_button(), "Power Button");
-  statusUpButton(upButton.check_button(), "Up Button");
-  statusDownButton(downButton.check_button(), "Down Button");
-}
 
-void setFrequency() // Function to send bits to BH1415
-{
-  digitalWrite(ena, HIGH); // Chip Enable HIGH
-  delayMicroseconds(10); // Initial delay after chip enable
+  if(direction == "up") {
+    frequency++;
+    if(frequency > 1080) frequency = 870;
+  } else if (direction == "down") {
+    frequency--;
+    if(frequency < 870) frequency = 1080;
+  }
+
+  delay(200);
+
+  digitalWrite(ENABLE, HIGH); // Chip ENABLE HIGH
+  delayMicroseconds(10); // Initial delay after chip ENABLE
 
   for (int n = 0; n < 11; n++) // Send frequency bits
   {
@@ -171,12 +112,12 @@ void setFrequency() // Function to send bits to BH1415
     if ((frequency & mask) != 0) // FREQUENCY IN BINARY 100.8 = 1111110000
     {
       // If the bit is 1, activate the DATA output, and the chip interprets it as 1
-      digitalWrite(data, HIGH); // MASK = 0000000001
+      digitalWrite(DATA, HIGH); // MASK = 0000000001
     }
     else
     {
       // If the bit is 0, deactivate the DATA output, and the chip interprets it as 0
-      digitalWrite(data, LOW);
+      digitalWrite(DATA, LOW);
     }
     send();
   }
@@ -184,24 +125,25 @@ void setFrequency() // Function to send bits to BH1415
   {
     mask = (1 << n); // Select each bit to send
     //Serial.println(mask);
-    if (st_mn & mask) // If the bit is 0
+    if (stereo_mono & mask) // If the bit is 0
     {
-      digitalWrite(data, HIGH); // Activate the DATA output
+      digitalWrite(DATA, HIGH); // Activate the DATA output
     }
     else
     {
-      digitalWrite(data, LOW); // Deactivate the DATA output
+      digitalWrite(DATA, LOW); // Deactivate the DATA output
     }
     send();
   }
-  digitalWrite(ena, LOW); // Chip Enable LOW
+  digitalWrite(ENABLE, LOW); // Chip ENABLEble LOW
+  delay(200);
 }
 
 void send() // Send each bit
 {
   delayMicroseconds(10); // Wait for 10 microseconds
-  digitalWrite(clk, HIGH); // Activate the clock output
+  digitalWrite(CLOCK, HIGH); // Activate the clock output
   delayMicroseconds(10); // Wait for 10 microseconds
-  digitalWrite(clk, LOW); // Deactivate the clock output
+  digitalWrite(CLOCK, LOW); // Deactivate the clock output
   delayMicroseconds(10); // Wait for 10 microseconds
 }
