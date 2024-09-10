@@ -57,7 +57,7 @@ void loop() {
 }
 
 void displayScreen() {
-
+  delay(50);
   display.clearDisplay();
 
   display.setTextSize(1);
@@ -71,9 +71,10 @@ void displayScreen() {
   display.setTextSize(1);
   display.setCursor(0, 50);
   is_on ? display.print("ON") : display.print("OFF");  
-  (stereo_mono == 8) ? display.println( " | MONO") : display.println( " | STEREO");
-  delay(50);
+  (stereo_mono == 8) ? display.println( " | MONO") : display.println( " | STEREO");  
+
   display.display();
+  delay(50);
 }
 
 void clickHandler(Button button, String click_type) {
