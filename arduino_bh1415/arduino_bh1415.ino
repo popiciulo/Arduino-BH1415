@@ -1,6 +1,15 @@
 #include <ButtonManager.h>
+#include <Adafruit_SSD1306.h>
 
 // start editing !!!
+String station = "Radio B99";
+
+#define SCREEN_WIDTH 128 // TFT display width, in pixels
+#define SCREEN_HEIGHT 64 // TFT display height, in pixels
+// Declaration for SSD1315 display connected using I2C
+#define OLED_RESET    -1 // Reset pin not used
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 // Define your buttons (name, pin, mode, initial status, previous status)
 Button buttons[3] = {
     {"power_button", 4, INPUT_PULLUP, HIGH, HIGH},
@@ -13,24 +22,20 @@ int totalButtons = 3;
 ButtonManager buttonManager(buttons, totalButtons, 500);
 
 // BH1415 
-int TX_ON_OFF = 9;
+int TX_ON_OFF = 9; // pin that turns voltage ON for IC
 int ENABLE = 10;
 int CLOCK = 11;
 int DATA = 12;
 
 unsigned int stereo_mono = 8; // Start with mono mode (8) and (9) for stereo
-unsigned int frequency = 875; // Start with frequency 101.1 MHz
+unsigned int frequency = 999; // Start with frequency 101.1 MHz
 unsigned short st = 0; // Mono stereo control
 unsigned int mask = 0; // Bit selection control for sending to BH1415
 
 boolean is_on = false;
-boolean is_menu = false;
-boolean refresh_message = true;
-
 // stop editing !!!
 
 void setup() {
-  Serial.begin(9600); // for debugging
 
   for (int i = 0; i < totalButtons; i++) {
     pinMode(buttons[i].pin, buttons[i].mode);
@@ -41,10 +46,10 @@ void setup() {
   pinMode(TX_ON_OFF, OUTPUT);
 
   digitalWrite(TX_ON_OFF, HIGH); // Turn OFF TX
-  while (!Serial);
-  Serial.print("OFF |");
-  Serial.println((stereo_mono == 8) ? " MONO" : " STEREO");
-  Serial.println("Freq: " + String((float)frequency/10) + "MHz");  
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Replace 0x3C with your display's I2C address if different
+  display.setTextColor(SSD1306_WHITE); 
+  displayScreen();  
 }
 
 void loop() {
@@ -52,41 +57,51 @@ void loop() {
 }
 
 void displayScreen() {
-  Serial.println("Freq: " + String((float)frequency/10) + "MHz");
-  is_on ? Serial.print("ON |") : Serial.print("OFF | ");
-  Serial.println((stereo_mono == 8) ? " MONO" : " STEREO");
+
+  display.clearDisplay();
+
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println(station);
+
+  display.setTextSize(2);
+  display.setCursor(0, 20);
+  display.println(String((float)frequency/10) + " MHz");
+
+  display.setTextSize(1);
+  display.setCursor(0, 50);
+  is_on ? display.print("ON") : display.print("OFF");  
+  (stereo_mono == 8) ? display.println( " | MONO") : display.println( " | STEREO");
+  delay(50);
+  display.display();
 }
 
 void clickHandler(Button button, String click_type) {
-  
-  if(button.name == "power_button" && click_type == "long") {
-    if(is_on) { 
-      digitalWrite(TX_ON_OFF, HIGH); // turn off TX
-      is_on = false;
-    } else {
-      is_on = true;
-      digitalWrite(TX_ON_OFF, LOW); // turn on TX
-      setFrequency("same");
+  if(click_type == "long") {
+      if(button.name == "power_button") {
+        if(is_on) {
+          is_on = false;
+          digitalWrite(TX_ON_OFF, HIGH); // turn off TX          
+        } else {
+          is_on = true;
+          digitalWrite(TX_ON_OFF, LOW); // turn on TX
+          setFrequency("same");          
+        }        
+     }   
+
+    if(button.name == "up_button" || button.name == "down_button") {
+      stereo_mono = (stereo_mono == 8) ? 9 : 8; // change MONO or STEREO
     }
-  }
+    displayScreen();
 
-  if(button.name == "up_button") {
-    if(click_type == "short") {
+  } else if (click_type == "short") {
+    if(button.name == "up_button") {
       setFrequency("up");
-    } else if(click_type == "long") { // TX if off and long click on UP
-      stereo_mono = (stereo_mono == 8) ? 9 : 8; // change MONO or STEREO
-    } 
-  } 
-
-  if(button.name == "down_button") {
-    if(click_type == "short") {
+    } else if (button.name == "down_button") {
       setFrequency("down");
-    } else if(click_type == "long") { // TX if off and long click
-      stereo_mono = (stereo_mono == 8) ? 9 : 8; // change MONO or STEREO
-    } 
-  } 
-
-  displayScreen();   
+    }
+    displayScreen();
+  }     
 }
 
 void setFrequency(String direction) // Function to send bits to BH1415
