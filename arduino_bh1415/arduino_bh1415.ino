@@ -18,7 +18,7 @@ Button buttons[3] = {
 };
 int totalButtons = 3;
 
-// Initialize the ButtonManager (3 buttons, 1000 ms for long press)
+// Initialize the ButtonManager (buttons array, time in ms for long press)
 ButtonManager buttonManager(buttons, totalButtons, 500);
 
 // BH1415 
@@ -49,6 +49,7 @@ void setup() {
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Replace 0x3C with your display's I2C address if different
   display.setTextColor(SSD1306_WHITE); 
+
   displayScreen();  
 }
 
@@ -57,7 +58,7 @@ void loop() {
 }
 
 void displayScreen() {
-  delay(50);
+  delay(100);
   display.clearDisplay();
 
   display.setTextSize(1);
@@ -74,7 +75,7 @@ void displayScreen() {
   (stereo_mono == 8) ? display.println( " | MONO") : display.println( " | STEREO");  
 
   display.display();
-  delay(50);
+  delay(100);
 }
 
 void clickHandler(Button button, String click_type) {
@@ -119,6 +120,7 @@ void setFrequency(String direction) // Function to send bits to BH1415
   delay(200);
 
   digitalWrite(ENABLE, HIGH); // Chip ENABLE HIGH
+
   delayMicroseconds(10); // Initial delay after chip ENABLE
 
   for (int n = 0; n < 11; n++) // Send frequency bits
@@ -140,7 +142,6 @@ void setFrequency(String direction) // Function to send bits to BH1415
   for (int n = 0; n <= 4; n++) // Send controls
   {
     mask = (1 << n); // Select each bit to send
-    //Serial.println(mask);
     if (stereo_mono & mask) // If the bit is 0
     {
       digitalWrite(DATA, HIGH); // Activate the DATA output
@@ -151,7 +152,7 @@ void setFrequency(String direction) // Function to send bits to BH1415
     }
     send();
   }
-  digitalWrite(ENABLE, LOW); // Chip ENABLEble LOW
+  digitalWrite(ENABLE, LOW); // Chip ENABLE LOW
   delay(200);
 }
 
@@ -159,6 +160,7 @@ void send() // Send each bit
 {
   delayMicroseconds(10); // Wait for 10 microseconds
   digitalWrite(CLOCK, HIGH); // Activate the clock output
+
   delayMicroseconds(10); // Wait for 10 microseconds
   digitalWrite(CLOCK, LOW); // Deactivate the clock output
   delayMicroseconds(10); // Wait for 10 microseconds
